@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # IMPORTANT: do not name this "vllm" / "vllm-service".
+  # Kubernetes injects <SERVICE>_SERVICE_HOST style env vars into pods; a
+  # "vllm-*" Service name creates VLLM_* variables that confuse the vLLM process.
+  name: inference-api
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference
+    app.kubernetes.io/part-of: vllm-learning-lab
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vllm
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+    protocol: TCP

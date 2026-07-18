@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-pdb
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference
+    app.kubernetes.io/part-of: vllm-learning-lab
+spec:
+  # Allow voluntary disruption of the single replica on a laptop Kind node.
+  # In multi-replica cloud clusters, prefer minAvailable: 1 (or higher).
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm

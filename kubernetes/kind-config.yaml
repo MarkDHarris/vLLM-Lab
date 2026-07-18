@@ -1,0 +1,30 @@
+# This file is a REFERENCE TEMPLATE only.
+# Scripts generate `.kind-config.generated.yaml` with an *absolute* hostPath.
+#
+# The previous failure mode was `hostPath: ~/.cache/huggingface`.
+# Kind does NOT expand `~`, so it created a literal directory named `~`
+# inside the repo (and the pod never saw your real Hugging Face cache).
+#
+# Do not apply this file directly unless you replace REPLACE_ME_ABSOLUTE_HF_CACHE
+# with something like /Users/you/.cache/huggingface and run:
+#   kind create cluster --config kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: vllm-cluster
+nodes:
+- role: control-plane
+  image: kindest/node:v1.32.2
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 8080
+    protocol: TCP
+  extraMounts:
+  - hostPath: REPLACE_ME_ABSOLUTE_HF_CACHE
+    containerPath: /var/local/huggingface
+    readOnly: true

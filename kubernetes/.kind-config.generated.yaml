@@ -1,0 +1,21 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: vllm-cluster
+nodes:
+- role: control-plane
+  image: kindest/node:v1.32.2
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 8080
+    protocol: TCP
+  extraMounts:
+  # IMPORTANT: hostPath must be an absolute path. Kind does NOT expand '~'.
+  - hostPath: /Users/markharris/.cache/huggingface
+    containerPath: /var/local/huggingface
+    readOnly: true

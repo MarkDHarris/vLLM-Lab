@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-server
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference
+    app.kubernetes.io/part-of: vllm-learning-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+  strategy:
+    type: RollingUpdate
+    # Laptop Kind nodes cannot host two vLLM replicas during a surge.
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vllm
+        app.kubernetes.io/component: inference
+        app.kubernetes.io/part-of: vllm-learning-lab
+    spec:
+      # Prevent Kubernetes from injecting <SERVICE>_* env vars into the process.
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai-cpu:latest
+        imagePullPolicy: IfNotPresent
+        # Override ENTRYPOINT so ConfigMap values can drive the serve command.
+        command: ["/bin/sh", "-c"]
+        args:
+          - >-
+            exec vllm serve "$MODEL_NAME"
+            --host 0.0.0.0
+            --port 8000
+            --dtype float16
+            --max-model-len "$MAX_MODEL_LEN"
+            --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION"
+            --served-model-name "$MODEL_NAME"
+            --enforce-eager
+        env:
+        - name: MODEL_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: vllm-config
+              key: MODEL_NAME
+        - name: MAX_MODEL_LEN
+          valueFrom:
+            configMapKeyRef:
+              name: vllm-config
+              key: MAX_MODEL_LEN
+        - name: GPU_MEMORY_UTILIZATION
+          valueFrom:
+            configMapKeyRef:
+              name: vllm-config
+              key: GPU_MEMORY_UTILIZATION
+        - name: HF_HOME
+          value: /root/.cache/huggingface
+        # Weights are prestaged on the Mac host and mounted read-only.
+        # Fail fast instead of hanging on a silent download inside the cluster.
+        - name: HF_HUB_OFFLINE
+          value: "1"
+        - name: TRANSFORMERS_OFFLINE
+          value: "1"
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token-secret
+              key: token
+              optional: true
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          failureThreshold: 60
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 20
+          failureThreshold: 3
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+          failureThreshold: 3
+          timeoutSeconds: 5
+        resources:
+          requests:
+            cpu: "2"
+            memory: 8Gi
+          limits:
+            cpu: "6"
+            # Must exceed vLLM's reserved worker memory (~gpu-memory-utilization * host RAM)
+            # or the cgroup OOM-kills the process during KV-cache init.
+            memory: 14Gi
+        volumeMounts:
+        - name: huggingface-cache
+          mountPath: /root/.cache/huggingface
+          readOnly: true
+        - name: shm
+          mountPath: /dev/shm
+      volumes:
+      - name: huggingface-cache
+        hostPath:
+          path: /var/local/huggingface
+          type: Directory
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
